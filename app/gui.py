@@ -764,7 +764,6 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(wrap_scroll(self._build_heading_tab()), "标题")
         self.tabs.addTab(wrap_scroll(self._build_pagenum_tab()), "页码 / 页眉页脚")
         v.addWidget(self.tabs, 1)
-        self._on_grid_mode_changed()
         return card
 
     def _build_page_tab(self):
@@ -813,42 +812,9 @@ class MainWindow(QMainWindow):
         row.addStretch(1)
         form.addRow("页眉距边界：", row)
 
-        self.gridMode = compact_combo(QComboBox(), 10)
-        for k, lab in engine.GRID_MODE_LABELS.items():
-            self.gridMode.addItem(lab, k)
-        self.gridMode.setToolTip("无：行距按“正文”页的设置值（WPS / Word 的网格会让行距失真，一般应禁用）。\n"
-                                 "指定行和字符网格：行高与字距由网格决定，用于公文“每页 22 行、每行 28 字”。")
-        form.addRow("文档网格：", self.gridMode)
-        row = QHBoxLayout()
-        row.setSpacing(8)
-        self.gridLines = QSpinBox()
-        self.gridLines.setRange(5, 60)
-        self.gridLines.setSuffix(" 行")
-        self.gridLines.setFixedWidth(90)
-        self.gridChars = QSpinBox()
-        self.gridChars.setRange(5, 80)
-        self.gridChars.setSuffix(" 字")
-        self.gridChars.setFixedWidth(90)
-        row.addWidget(self.gridLines)
-        row.addWidget(QLabel("每行"))
-        row.addWidget(self.gridChars)
-        self.gridHint = hint_label("行高 = 版心高度 ÷ 行数；正文行距设置不再生效")
-        row.addWidget(self.gridHint)
-        row.addStretch(1)
-        self.gridRow = QWidget()
-        self.gridRow.setLayout(row)
-        form.addRow("每页：", self.gridRow)
-        self.gridMode.currentIndexChanged.connect(self._on_grid_mode_changed)
-        form.addRow("", hint_label("纸张、页边距与文档网格会应用到文档中的所有分节。"))
+        form.addRow("", hint_label("纸张与页边距会应用到文档中的所有分节；"
+                                   "行距在“正文”页设置，排版时会禁用文档网格保证行距真实生效。"))
         return w
-
-    def _on_grid_mode_changed(self, *args):
-        grid = self.gridMode.currentData() == "lines_chars"
-        self.gridRow.setEnabled(grid)
-        if hasattr(self, "lsType"):
-            self.lsType.setEnabled(not grid)
-            self.lsValue.setEnabled(not grid)
-            self.lsNote.setVisible(grid)
 
     def _build_body_tab(self):
         w = QWidget()
@@ -882,9 +848,6 @@ class MainWindow(QMainWindow):
         self._on_ls_type_changed()
         row.addWidget(self.lsType, 1)
         row.addWidget(self.lsValue)
-        self.lsNote = hint_label("已启用文档网格，行高由“页面”页的每页行数决定")
-        self.lsNote.hide()
-        row.addWidget(self.lsNote)
         row.addStretch(1)
         form.addRow("行距：", row)
 
@@ -1265,9 +1228,6 @@ class MainWindow(QMainWindow):
             "margin_right_cm": self.margins["right"].value(),
             "header_distance_cm": self.headerDist.value(),
             "footer_distance_cm": self.footerDist.value(),
-            "grid_mode": self.gridMode.currentData(),
-            "grid_lines": self.gridLines.value(),
-            "grid_chars": self.gridChars.value(),
         }
         p["body"] = {
             "font_east": self.bodyEast.currentText().strip() or "宋体",
@@ -1318,10 +1278,6 @@ class MainWindow(QMainWindow):
                 self.margins[key].setValue(float(pg[f"margin_{key}_cm"]))
             self.headerDist.setValue(float(pg.get("header_distance_cm", 1.5)))
             self.footerDist.setValue(float(pg.get("footer_distance_cm", 1.75)))
-            set_data_combo(self.gridMode, pg.get("grid_mode", "none"), "none")
-            self.gridLines.setValue(int(pg.get("grid_lines", 22)))
-            self.gridChars.setValue(int(pg.get("grid_chars", 28)))
-            self._on_grid_mode_changed()
 
             b = p["body"]
             set_font_combo(self.bodyEast, b["font_east"], CHINESE_FONTS)
@@ -1398,11 +1354,7 @@ class MainWindow(QMainWindow):
         b, pn = p["body"], p["page_number"]
         unit = "倍" if b["line_spacing_type"] == "multiple" else "磅"
         ls_kind = "" if b["line_spacing_type"] == "multiple" else LS_TYPE_LABELS[b["line_spacing_type"]]
-        if p["page"].get("grid_mode") == "lines_chars":
-            para_text = (f"网格 每页 {p['page']['grid_lines']} 行 × {p['page']['grid_chars']} 字，"
-                         f"缩进 {b['first_line_indent_chars']:g} 字")
-        else:
-            para_text = f"{ls_kind}行距 {b['line_spacing_value']:g} {unit}，缩进 {b['first_line_indent_chars']:g} 字符"
+        para_text = f"{ls_kind}行距 {b['line_spacing_value']:g} {unit}，缩进 {b['first_line_indent_chars']:g} 字符"
         h1 = p["headings"][0]
         if pn["enabled"]:
             pn_text = (f"{engine.POSITION_LABELS[pn['position']].replace('页面', '').replace('（公文）', '')}"

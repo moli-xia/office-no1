@@ -12,7 +12,7 @@ from docx import Document
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt
 
-from app.engine import PAGE_SIZES_CM, _grid_metrics, apply_preset
+from app.engine import PAGE_SIZES_CM, apply_preset
 from app.presets import BUILTIN_PRESETS
 
 TEST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_out")
@@ -59,22 +59,11 @@ def check_output(out, preset, errors):
         if abs(got - want) > 0.05:
             errors.append(f"[{preset['name']}] {attr} 期望 {want}cm 实际 {got:.3f}cm")
 
-    # 文档网格
+    # 文档网格必须被禁用（否则固定 / 倍数行距在 WPS 中会失真）
     grid = sec._sectPr.find(qn("w:docGrid"))
-    grid_on = page.get("grid_mode") == "lines_chars"
-    if grid_on:
-        line_pitch, char_pitch, char_space = _grid_metrics(page, preset["body"]["size_pt"])
-        if (grid is None or grid.get(qn("w:type")) != "linesAndChars"
-                or grid.get(qn("w:linePitch")) != str(line_pitch)
-                or grid.get(qn("w:charSpace")) != str(char_space)):
-            errors.append(f"[{preset['name']}] 字符网格不符: {None if grid is None else dict(grid.attrib)}")
-        # 字符间距必须略小于精确值，否则 Word 每行少 1 字
-        pitch_from_xml = preset["body"]["size_pt"] + int(grid.get(qn("w:charSpace"))) / 4096
-        text_w_pt = (sec.page_width - sec.left_margin - sec.right_margin) / 12700
-        if not (page["grid_chars"] <= text_w_pt / pitch_from_xml < page["grid_chars"] + 0.01):
-            errors.append(f"[{preset['name']}] 字符间距换算后每行不是 {page['grid_chars']} 字")
-    elif page.get("grid_mode", "none") == "none" and (grid is None or grid.get(qn("w:type")) != "default"):
-        errors.append(f"[{preset['name']}] 文档网格未禁用")
+    if grid is None or grid.get(qn("w:type")) != "default" \
+            or grid.get(qn("w:linePitch")) is not None or grid.get(qn("w:charSpace")) is not None:
+        errors.append(f"[{preset['name']}] 文档网格未禁用: {None if grid is None else dict(grid.attrib)}")
 
     # Normal 样式字体与字号（Length 为 EMU，1 磅 = 12700 EMU）
     normal = doc.styles["Normal"]
@@ -95,21 +84,14 @@ def check_output(out, preset, errors):
     else:
         ind = body_p._p.pPr.find(qn("w:ind"))
         chars = float(preset["body"]["first_line_indent_chars"])
-        if chars > 0:
-            if grid_on:
-                # 网格模式：缇值略小于 N 个网格，且不带 firstLineChars（否则 Word 会挤到下一格）
-                want = str(int(chars * char_pitch))
-                if ind is None or ind.get(qn("w:firstLine")) != want or ind.get(qn("w:firstLineChars")) is not None:
-                    errors.append(f"[{preset['name']}] 网格首行缩进不符: {None if ind is None else dict(ind.attrib)}")
-            elif ind is None or ind.get(qn("w:firstLineChars")) != str(int(round(chars * 100))):
-                errors.append(f"[{preset['name']}] 首行缩进不符: {None if ind is None else ind.get(qn('w:firstLineChars'))}")
+        if chars > 0 and (ind is None or ind.get(qn("w:firstLineChars")) != str(int(round(chars * 100)))):
+            errors.append(f"[{preset['name']}] 首行缩进不符: {None if ind is None else ind.get(qn('w:firstLineChars'))}")
         snap = body_p._p.pPr.find(qn("w:snapToGrid"))
-        want_snap = "1" if grid_on else "0"
-        if snap is None or snap.get(qn("w:val")) != want_snap:
-            errors.append(f"[{preset['name']}] snapToGrid 应为 {want_snap}")
+        if snap is None or snap.get(qn("w:val")) != "0":
+            errors.append(f"[{preset['name']}] snapToGrid 应为 0")
         ls = body_p.paragraph_format.line_spacing
-        want_ls = 1.0 if grid_on else float(preset["body"]["line_spacing_value"])
-        if grid_on or preset["body"]["line_spacing_type"] == "multiple":
+        want_ls = float(preset["body"]["line_spacing_value"])
+        if preset["body"]["line_spacing_type"] == "multiple":
             if not (isinstance(ls, float) and abs(ls - want_ls) < 0.01):
                 errors.append(f"[{preset['name']}] 行距不符: {ls!r}")
         else:
@@ -165,10 +147,6 @@ def check_output(out, preset, errors):
             want_bold = "1" if hcfg["bold"] else "0"
             if b is None or b.get(qn("w:val")) != want_bold:
                 errors.append(f"[{preset['name']}] 一级标题加粗不符")
-        if grid_on and hcfg["size_pt"] > preset["body"]["size_pt"]:
-            snap = h1._p.pPr.find(qn("w:snapToGrid"))
-            if snap is None or snap.get(qn("w:val")) != "0":
-                errors.append(f"[{preset['name']}] 大字号标题应不对齐字符网格")
 
 
 def make_complex_sample(path):

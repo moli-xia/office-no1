@@ -17,12 +17,7 @@ DEFAULT_PRESET = {
         "margin_right_cm": 3.17,
         "header_distance_cm": 1.5,   # 页眉距边界
         "footer_distance_cm": 1.75,  # 页脚距边界
-        # 文档网格：none = 禁用（行距按设置值，WPS/Word 行距才不会失真）；
-        # lines_chars = 指定行和字符网格（公文 22 行 × 28 字，行高由网格决定，行距设置不生效）；
-        # keep = 保持原文档设置
-        "grid_mode": "none",
-        "grid_lines": 22,
-        "grid_chars": 28,
+        # 行距始终由 body.line_spacing 决定；引擎会禁用文档网格，保证行距真实生效
     },
     "body": {
         "font_east": "宋体",
@@ -80,10 +75,9 @@ def merge_preset(data: dict) -> dict:
     if isinstance(data, dict):
         merge(base, data)
         page = base["page"]
-        # 旧版字段 disable_doc_grid → grid_mode
-        if "grid_mode" not in (data.get("page") or {}) and "disable_doc_grid" in page:
-            page["grid_mode"] = "none" if page["disable_doc_grid"] else "keep"
-        page.pop("disable_doc_grid", None)
+        # 清理旧版预设的文档网格字段：行距一律由“正文”行距决定，网格已移除
+        for legacy in ("grid_mode", "grid_lines", "grid_chars", "disable_doc_grid"):
+            page.pop(legacy, None)
         # 旧版预设只有 3 级标题：补齐第 4 级
         levels = {h.get("level") for h in base.get("headings", [])}
         for h in DEFAULT_PRESET["headings"]:
@@ -102,7 +96,7 @@ BUILTIN_PRESETS = [
         "name": "标准办公文档",
         "page": {"size": "A4", "orientation": "portrait",
                  "margin_top_cm": 2.54, "margin_bottom_cm": 2.54,
-                 "margin_left_cm": 3.17, "margin_right_cm": 3.17, "grid_mode": "none"},
+                 "margin_left_cm": 3.17, "margin_right_cm": 3.17},
         "body": {"font_east": "宋体", "font_west": "Times New Roman", "size_pt": 12.0,
                  "align": "justify", "line_spacing_type": "multiple", "line_spacing_value": 1.5,
                  "space_before_pt": 0.0, "space_after_pt": 0.0,
@@ -130,7 +124,8 @@ BUILTIN_PRESETS = [
     {
         # GB/T 9704-2012《党政机关公文格式》：
         # 5.1 A4；5.2 版心 156 mm × 225 mm，天头 37 mm、订口 28 mm（→ 下 35 mm、右 26 mm）；
-        # 5.3 一般用 3 号仿宋体，每面 22 行、每行 28 字，撑满版心（→ 指定行和字符网格）；
+        # 5.3 一般用 3 号仿宋体，每面 22 行、每行 28 字，撑满版心
+        #     （→ 正文固定行距 28.9 磅：版心 225 mm ÷ 22 行 ≈ 28.95 磅，取 28.9 保证每页 22 行）；
         # 5.5 页码 4 号半角宋体阿拉伯数字，左右各一条一字线，一字线上距版心下边缘 7 mm，
         #     单页码居右空一字、双页码居左空一字；
         # 7.3.1 标题 2 号小标宋体居中，标题下空一行；
@@ -140,15 +135,14 @@ BUILTIN_PRESETS = [
         "page": {"size": "A4", "orientation": "portrait",
                  "margin_top_cm": 3.7, "margin_bottom_cm": 3.5,
                  "margin_left_cm": 2.8, "margin_right_cm": 2.6,
-                 "header_distance_cm": 1.5, "footer_distance_cm": 2.5,
-                 "grid_mode": "lines_chars", "grid_lines": 22, "grid_chars": 28},
-        # 行距值仅在关闭文档网格时生效：版心 225 mm / 22 行 ≈ 28.95 磅，取 28.9 保证每页 22 行
+                 "header_distance_cm": 1.5, "footer_distance_cm": 2.5},
+        # 每页 22 行由正文固定行距实现：版心 225 mm ÷ 22 行 ≈ 28.95 磅，取 28.9 保证放得下 22 行
         "body": {"font_east": "仿宋_GB2312", "font_west": "Times New Roman", "size_pt": 16.0,
                  "align": "justify", "line_spacing_type": "exact", "line_spacing_value": 28.9,
                  "space_before_pt": 0.0, "space_after_pt": 0.0,
                  "first_line_indent_chars": 2.0, "format_tables": False},
         "headings": [
-            # 公文标题：2 号小标宋，居中，标题下空一行（略小于一个网格行距，对齐网格后正好空一行）
+            # 公文标题：2 号小标宋，居中，标题下空一行（28.9 磅 ≈ 一行行距）
             {"level": 1, "font_east": "方正小标宋简体", "font_west": "Times New Roman", "size_pt": 22.0,
              "bold": False, "align": "center", "space_before_pt": 0.0, "space_after_pt": 28.9,
              "first_line_indent_chars": 0.0},
@@ -176,7 +170,7 @@ BUILTIN_PRESETS = [
         "name": "毕业论文（通用）",
         "page": {"size": "A4", "orientation": "portrait",
                  "margin_top_cm": 3.0, "margin_bottom_cm": 2.5,
-                 "margin_left_cm": 3.0, "margin_right_cm": 2.5, "grid_mode": "none"},
+                 "margin_left_cm": 3.0, "margin_right_cm": 2.5},
         "body": {"font_east": "宋体", "font_west": "Times New Roman", "size_pt": 12.0,
                  "align": "justify", "line_spacing_type": "multiple", "line_spacing_value": 1.5,
                  "space_before_pt": 0.0, "space_after_pt": 0.0,
@@ -205,7 +199,7 @@ BUILTIN_PRESETS = [
         "name": "简洁现代报告",
         "page": {"size": "A4", "orientation": "portrait",
                  "margin_top_cm": 2.54, "margin_bottom_cm": 2.54,
-                 "margin_left_cm": 2.8, "margin_right_cm": 2.8, "grid_mode": "none"},
+                 "margin_left_cm": 2.8, "margin_right_cm": 2.8},
         "body": {"font_east": "微软雅黑", "font_west": "Calibri", "size_pt": 10.5,
                  "align": "justify", "line_spacing_type": "multiple", "line_spacing_value": 1.5,
                  "space_before_pt": 0.0, "space_after_pt": 6.0,

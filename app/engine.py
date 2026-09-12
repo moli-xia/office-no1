@@ -10,7 +10,6 @@
 说明：正文只规范字体族与字号，不改动加粗等局部强调；标题则按预设强制统一。
 """
 
-import math
 import os
 import re
 
@@ -52,12 +51,6 @@ FORMAT_LABELS = {
     "cn": "中文：第 1 页",
     "cn_total": "中文总页数：第 1 页 共 N 页",
     "en": "英文：Page 1 of N",
-}
-
-GRID_MODE_LABELS = {
-    "none": "无（行距按设置值，推荐）",
-    "lines_chars": "指定行和字符网格（公文：每页 22 行 × 每行 28 字）",
-    "keep": "保持原文档设置",
 }
 
 HEADING_LEVELS = (1, 2, 3, 4)
@@ -139,67 +132,28 @@ def _set_run_font(r_el, east, west, size_pt, bold=None):
     _apply_rpr(r_el.get_or_add_rPr(), east, west, size_pt, bold)
 
 
-def _set_snap(ppr, on):
-    """设置段落“对齐到文档网格”。不用网格时必须关闭，否则固定/倍数行距在网格文档中会失真；
-    用网格排版（公文 22 行 × 28 字）时则必须打开，行高由网格决定。"""
+def _set_snap_off(ppr):
+    """关闭段落“对齐到文档网格”。文档网格会让固定 / 倍数行距失真（尤其 WPS），
+    本工具行距一律按“正文”页设置值生效，因此所有段落都必须关闭。"""
     snap = ppr.find(qn("w:snapToGrid"))
     if snap is None:
         snap = OxmlElement("w:snapToGrid")
         ppr.insert_element_before(snap, *PPR_AFTER_SNAP)
-    snap.set(qn("w:val"), "1" if on else "0")
+    snap.set(qn("w:val"), "0")
 
 
-def _set_snap_off(ppr):
-    _set_snap(ppr, False)
-
-
-def _grid_on(preset):
-    return preset["page"].get("grid_mode") == "lines_chars"
-
-
-def _set_first_line_indent(p_el, chars, size_pt, char_pitch_twips=None):
-    """按“字符”设置首行缩进（w:firstLineChars），并写入磅值兜底。chars<=0 时显式清零。
-
-    字符网格模式下改写成略小于 N 个网格的缇值：Word 把“2 字符”按四舍五入后的网格间距换算，
-    结果比 2 格多出零点几磅，首字会被挤到第 3 格（首行只剩 25 字），这是 Word 的老毛病。
-    """
+def _set_first_line_indent(p_el, chars, size_pt):
+    """按“字符”设置首行缩进（w:firstLineChars），并写入磅值兜底。chars<=0 时显式清零。"""
     ind = p_el.get_or_add_pPr().get_or_add_ind()
     if chars and chars > 0:
-        if char_pitch_twips:
-            if ind.get(qn("w:firstLineChars")) is not None:
-                del ind.attrib[qn("w:firstLineChars")]
-            ind.set(qn("w:firstLine"), str(int(math.floor(chars * char_pitch_twips))))
-        else:
-            ind.set(qn("w:firstLineChars"), str(int(round(chars * 100))))
-            ind.set(qn("w:firstLine"), str(int(round(size_pt * chars * 20))))
+        ind.set(qn("w:firstLineChars"), str(int(round(chars * 100))))
+        ind.set(qn("w:firstLine"), str(int(round(size_pt * chars * 20))))
     else:
         for a in ("w:firstLine", "w:firstLineChars"):
             ind.set(qn(a), "0")
 
 
-def _grid_metrics(page_cfg, body_size_pt):
-    """字符网格参数：(行距缇, 字符间距缇, charSpace)。与 Word“指定行和字符网格”写出的 XML 一致：
-    linePitch = 版心高度 / 每页行数（缇，向下取整）；charSpace = (字符间距 - 正文字号) × 4096。"""
-    w, h = PAGE_SIZES_CM[page_cfg["size"]]
-    if page_cfg["orientation"] == "landscape":
-        w, h = h, w
-    lines = max(1, int(page_cfg.get("grid_lines", 22)))
-    chars = max(1, int(page_cfg.get("grid_chars", 28)))
-    # 用与 python-docx 写入 pgSz / pgMar 相同的取整方式换算成缇，保证和 Word 读到的数值一致
-    tw = lambda cm_val: Cm(float(cm_val)).twips  # noqa: E731
-    text_h_twips = tw(h) - tw(page_cfg["margin_top_cm"]) - tw(page_cfg["margin_bottom_cm"])
-    text_w_twips = tw(w) - tw(page_cfg["margin_left_cm"]) - tw(page_cfg["margin_right_cm"])
-    char_pitch_twips = text_w_twips / chars
-    # 向下取整：字符间距只能略小于精确值，否则 Word 会算成每行少 1 个字（27 而不是 28）
-    char_space = math.floor((char_pitch_twips / 20 - float(body_size_pt)) * 4096)
-    return int(text_h_twips / lines), char_pitch_twips, char_space
-
-
-def _set_line_spacing(pf, body_cfg, grid=False):
-    if grid:
-        # 网格模式：单倍行距 + 对齐网格，每行高度即网格行距（版心高度 / 每页行数）
-        pf.line_spacing = 1.0
-        return
+def _set_line_spacing(pf, body_cfg):
     t, v = body_cfg["line_spacing_type"], body_cfg["line_spacing_value"]
     if t == "multiple":
         pf.line_spacing = float(v)  # 浮点数 => lineRule=auto，即多倍行距
@@ -305,7 +259,7 @@ def _find_paragraph_style(doc, names):
     return None
 
 
-def _update_normal_style(doc, preset, char_pitch=None):
+def _update_normal_style(doc, preset):
     style = _find_paragraph_style(doc, ("Normal", "正文"))
     if style is None:
         return
@@ -313,15 +267,15 @@ def _update_normal_style(doc, preset, char_pitch=None):
     _apply_rpr(style.element.get_or_add_rPr(),
                east=body["font_east"], west=body["font_west"], size_pt=body["size_pt"])
     pf = style.paragraph_format
-    _set_line_spacing(pf, body, _grid_on(preset))
+    _set_line_spacing(pf, body)
     pf.space_before = Pt(float(body["space_before_pt"]))
     pf.space_after = Pt(float(body["space_after_pt"]))
     pf.alignment = ALIGN_MAP[body["align"]]
     # 预设为 0 时也要显式清零，否则样式里原有的缩进会保留下来
-    _set_first_line_indent(style.element, body["first_line_indent_chars"], body["size_pt"], char_pitch)
+    _set_first_line_indent(style.element, body["first_line_indent_chars"], body["size_pt"])
 
 
-def _update_heading_style(doc, level, hcfg, body_cfg, grid=False, char_pitch=None):
+def _update_heading_style(doc, level, hcfg, body_cfg):
     style = _find_paragraph_style(doc, (f"Heading {level}", f"标题 {level}"))
     if style is None or hcfg is None:
         return
@@ -329,46 +283,45 @@ def _update_heading_style(doc, level, hcfg, body_cfg, grid=False, char_pitch=Non
                east=hcfg["font_east"], west=hcfg["font_west"],
                size_pt=hcfg["size_pt"], bold=bool(hcfg["bold"]), reset_style=True)
     pf = style.paragraph_format
-    _set_line_spacing(pf, body_cfg, grid)
+    _set_line_spacing(pf, body_cfg)
     pf.space_before = Pt(float(hcfg["space_before_pt"]))
     pf.space_after = Pt(float(hcfg["space_after_pt"]))
     pf.alignment = ALIGN_MAP[hcfg["align"]]
-    _set_first_line_indent(style.element, hcfg.get("first_line_indent_chars", 0), hcfg["size_pt"], char_pitch)
+    _set_first_line_indent(style.element, hcfg.get("first_line_indent_chars", 0), hcfg["size_pt"])
 
 
-def _format_body_paragraph(p, body, in_table=False, grid=False, char_pitch=None):
+def _format_body_paragraph(p, body, in_table=False):
     """规范正文段落。
 
     - 编号 / 项目符号段落：保留其原有缩进（悬挂缩进由编号定义控制，强行首行缩进会错位）
     - 表格内段落：不加首行缩进、不改对齐，只统一字体、字号与行距
     """
     pf = p.paragraph_format
-    _set_line_spacing(pf, body, grid)
+    _set_line_spacing(pf, body)
     pf.space_before = Pt(float(body["space_before_pt"]))
     pf.space_after = Pt(float(body["space_after_pt"]))
     ppr = p._p.get_or_add_pPr()
-    _set_snap(ppr, grid)
+    _set_snap_off(ppr)
     if in_table:
         _set_first_line_indent(p._p, 0, body["size_pt"])
     elif not _has_numbering(p):
         pf.alignment = ALIGN_MAP[body["align"]]
-        _set_first_line_indent(p._p, body["first_line_indent_chars"], body["size_pt"], char_pitch)
+        _set_first_line_indent(p._p, body["first_line_indent_chars"], body["size_pt"])
     else:
         pf.alignment = ALIGN_MAP[body["align"]]
     for r in p._p.iter(qn("w:r")):
         _set_run_font(r, body["font_east"], body["font_west"], body["size_pt"])
 
 
-def _format_heading_paragraph(p, hcfg, body_cfg, grid=False, char_pitch=None):
+def _format_heading_paragraph(p, hcfg, body_cfg):
     pf = p.paragraph_format
     pf.alignment = ALIGN_MAP[hcfg["align"]]
-    _set_line_spacing(pf, body_cfg, grid)  # 标题行距继承正文设置
+    _set_line_spacing(pf, body_cfg)  # 标题行距继承正文设置
     pf.space_before = Pt(float(hcfg["space_before_pt"]))
     pf.space_after = Pt(float(hcfg["space_after_pt"]))
     ppr = p._p.get_or_add_pPr()
-    # 网格模式下，比正文大的标题（公文 2 号标题）不对齐字符网格，否则字距会被撑开
-    _set_snap(ppr, grid and float(hcfg["size_pt"]) <= float(body_cfg["size_pt"]))
-    _set_first_line_indent(p._p, hcfg.get("first_line_indent_chars", 0), hcfg["size_pt"], char_pitch)
+    _set_snap_off(ppr)
+    _set_first_line_indent(p._p, hcfg.get("first_line_indent_chars", 0), hcfg["size_pt"])
     for r in p._p.iter(qn("w:r")):
         _apply_rpr(r.get_or_add_rPr(), hcfg["font_east"], hcfg["font_west"], hcfg["size_pt"],
                    bold=bool(hcfg["bold"]), reset_style=True)
@@ -387,7 +340,7 @@ def _iter_table_paragraphs(table):
 # 页面 / 页码 / 页眉页脚
 # ---------------------------------------------------------------------------
 
-def _apply_page_setup(section, page_cfg, body_size_pt=12.0):
+def _apply_page_setup(section, page_cfg):
     w, h = PAGE_SIZES_CM[page_cfg["size"]]
     if page_cfg["orientation"] == "landscape":
         w, h = h, w
@@ -405,9 +358,7 @@ def _apply_page_setup(section, page_cfg, body_size_pt=12.0):
     if page_cfg.get("footer_distance_cm"):
         section.footer_distance = Cm(float(page_cfg["footer_distance_cm"]))
 
-    mode = page_cfg.get("grid_mode", "none")
-    if mode == "keep":
-        return
+    # 禁用文档网格：网格会让固定 / 倍数行距失真，行距一律按“正文”页的设置值生效
     sect_pr = section._sectPr
     grid = sect_pr.find(qn("w:docGrid"))
     if grid is None:
@@ -416,13 +367,7 @@ def _apply_page_setup(section, page_cfg, body_size_pt=12.0):
     for attr in ("w:linePitch", "w:charSpace"):
         if grid.get(qn(attr)) is not None:
             del grid.attrib[qn(attr)]
-    if mode == "lines_chars":
-        line_pitch, _pitch, char_space = _grid_metrics(page_cfg, body_size_pt)
-        grid.set(qn("w:type"), "linesAndChars")
-        grid.set(qn("w:linePitch"), str(line_pitch))
-        grid.set(qn("w:charSpace"), str(char_space))
-    else:
-        grid.set(qn("w:type"), "default")
+    grid.set(qn("w:type"), "default")
 
 
 def _set_page_start(section, start_at):
@@ -624,22 +569,20 @@ def apply_preset(input_path, preset, output_path):
     try:
         doc = Document(input_path)
         stats = {"body": 0, "h1": 0, "h2": 0, "h3": 0, "h4": 0, "table": 0, "skipped": 0}
-        grid = _grid_on(preset)
         body = preset["body"]
-        pitch = _grid_metrics(preset["page"], body["size_pt"])[1] if grid else None
 
-        _update_normal_style(doc, preset, pitch)
+        _update_normal_style(doc, preset)
         headings = {h["level"]: h for h in preset.get("headings", []) if h["level"] in HEADING_LEVELS}
         for lvl in HEADING_LEVELS:
-            _update_heading_style(doc, lvl, headings.get(lvl), body, grid, pitch)
+            _update_heading_style(doc, lvl, headings.get(lvl), body)
 
         for p in doc.paragraphs:
             lvl = _get_heading_level(p)
             if lvl == 0:
-                _format_body_paragraph(p, body, grid=grid, char_pitch=pitch)
+                _format_body_paragraph(p, body)
                 stats["body"] += 1
             elif lvl in headings:
-                _format_heading_paragraph(p, headings[lvl], body, grid, pitch)
+                _format_heading_paragraph(p, headings[lvl], body)
                 stats[f"h{lvl}"] += 1
             else:
                 stats["skipped"] += 1
@@ -647,11 +590,11 @@ def apply_preset(input_path, preset, output_path):
         if body.get("format_tables"):
             for t in doc.tables:
                 for p in _iter_table_paragraphs(t):
-                    _format_body_paragraph(p, body, in_table=True, grid=grid, char_pitch=pitch)
+                    _format_body_paragraph(p, body, in_table=True)
                     stats["table"] += 1
 
         for section in doc.sections:
-            _apply_page_setup(section, preset["page"], body["size_pt"])
+            _apply_page_setup(section, preset["page"])
         _apply_header_footer(doc, preset)
 
         doc.save(output_path)
