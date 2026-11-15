@@ -4,7 +4,7 @@
 
 ![应用截图](docs/gui.png)
 
-**下载**：[Releases 最新版](https://github.com/moli-xia/office-no1/releases/latest) —— Windows 直接下载 `材料排版工具.exe`（免安装单文件）；国产 Linux（deepin / 统信 UOS / 麒麟）下载 `linux-安装包.zip` 解压后运行 `install.sh`（也可直接克隆本仓库的 `linux/` 目录）。
+**下载**：[Releases 最新版](https://github.com/moli-xia/office-no1/releases/latest) —— Windows 直接下载 `gongwen-paiban-windows.exe`（材料排版工具，免安装单文件，下载后可自行改名）；国产 Linux（deepin / 统信 UOS / 麒麟）下载 `gongwen-paiban-linux-installer.zip` 解压后运行 `install.sh`（也可直接克隆本仓库的 `linux/` 目录）。
 
 **排版效果**（GB/T 9704—2012 默认格式，含标题/楷体加粗小标题/接排正文/页码一字线）：
 
