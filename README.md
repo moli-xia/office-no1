@@ -1,9 +1,14 @@
 # 材料排版工具（GB/T 9704—2012 / 市委办公室材料排版基本格式）
 
-跨平台公文排版应用：将 `.docx` / `.doc` / `.wps` 文件拖入窗口或点击选择，一键完成全文排版。**默认采用 GB/T 9704—2012 党政机关公文格式**，市委办公室材料排版基本格式作为可选标签页。处理结果另存为「原名_排版.docx」，不改动原文件。
+跨平台公文排版应用：将 `.docx` / `.doc` / `.wps` 文件拖入窗口或点击选择，一键完成全文排版。**默认采用 GB/T 9704—2012 党政机关公文格式**，市委办公室材料排版基本格式作为可选标签页。处理结果另存为「原名_排版」（保持原文件格式），不改动原文件。
 
-- **Windows**：`dist\材料排版工具.exe`（单文件免安装）
-- **国产 Linux（deepin / 统信 UOS / 麒麟 Kylin，x86_64 / ARM64）**：`linux/install.sh` 一键安装，详见 [linux/README-Linux.md](linux/README-Linux.md)
+![应用截图](docs/gui.png)
+
+**下载**：[Releases 最新版](https://github.com/moli-xia/office-no1/releases/latest) —— Windows 直接下载 `材料排版工具.exe`（免安装单文件）；国产 Linux（deepin / 统信 UOS / 麒麟）下载 `linux-安装包.zip` 解压后运行 `install.sh`（也可直接克隆本仓库的 `linux/` 目录）。
+
+**排版效果**（GB/T 9704—2012 默认格式，含标题/楷体加粗小标题/接排正文/页码一字线）：
+
+![排版效果](docs/sample_gb.png)
 
 ## 两种格式标准
 
