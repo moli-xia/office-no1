@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+
+# 打包产物
+dist/
+build/
+*.spec
+
+# 测试与渲染中间文件
+render/
+样例_原始.docx
+样例_排版*.docx
+样例_排版*.pdf
+*.log

@@ -1,0 +1,7 @@
+# 行尾规范：shell 脚本必须 LF（Linux 执行），bat 必须 CRLF（Windows）
+* text=auto
+*.sh text eol=lf
+*.bat text eol=crlf
+*.py text eol=lf
+*.svg text eol=lf
+*.md text eol=lf
